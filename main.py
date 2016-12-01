@@ -15,6 +15,8 @@ import sys
 import math
 import array
 
+MU = 256
+
 def sgn(i):
     if i == 0:
         return 0
@@ -68,17 +70,17 @@ x = np.frombuffer(x, dtype= "int16")
 x = np.asarray(x, dtype = 'f')
 
 
-plt.plot(x[1000:1100])
+plt.plot(x[1000:4000])
 x, max, min = normalize(x)
 
 for i in range(len(x)):
-    x[i] = mu_law(x[i], 256)
-    x[i] = quantizate(x[i], 256)
+    x[i] = mu_law(x[i], MU)
+    x[i] = quantizate(x[i], MU)
 
 for i in range(len(x)):
-    x[i] = mu_law_decode(x[i], 256)
+    x[i] = mu_law_decode(x[i], MU)
 x = deNormalize(x, max, min)
-plt.plot(x[1000:1100])
+plt.plot(x[1000:4000])
 
 w = wave.Wave_write("test.wav")
 w.setparams((
@@ -88,9 +90,10 @@ w.setparams((
     len(x),                 # number of frames
     "NONE", "not compressed"  # no compression
 ))
+
 w.writeframes(array.array('h', x).tostring())
 w.close()
-
+plt.show()
 
 
 """
