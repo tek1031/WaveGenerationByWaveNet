@@ -12,6 +12,11 @@ class Iterator():
         self.pos = 0
         self.useGPU = useGPU
 
+        if useGPU:
+            self.data = chainer.cuda.to_gpu(data)
+            self.answer = chainer.cuda.to_gpu(answer)
+
+
     def Next(self):
         xp = chainer.cuda.cupy if self.useGPU else np
         if self.newEpoch:
@@ -36,4 +41,5 @@ class Iterator():
         self.pos += n
         if self.pos == len(self.data):
             self.newEpoch = True
-        return chainer.Variable(x), t
+        variable = chainer.Variable(x)
+        return variable, t

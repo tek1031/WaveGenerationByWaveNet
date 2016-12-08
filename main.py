@@ -6,10 +6,10 @@ from chainer import training
 from chainer.training import extensions
 import numpy as np
 import chainer.cuda
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cupy
-
-
 import wave
 import sys
 import math
@@ -75,7 +75,7 @@ def saveSound(v, samplingRate, fileName):
 
 #file_name = "880Hz.WAV"
 #file_name = "0321.wav"
-file_name = "testInput1.wav"
+file_name = "Data/test2.wav"
 wave_file = wave.open(file_name,"r") #open
 
 music = wave_file.readframes(wave_file.getnframes()) 
@@ -83,10 +83,10 @@ music = np.frombuffer(music, dtype= "int16")
 music = np.asarray(music, dtype = 'f')
 rawMusic = np.copy(music)
 
-TEST = 5
+TEST = 10
 FLAME_RATE = 44100*2
 music = music[::TEST]
-music = music[len(music)*1/20:len(music)*2/20]
+music = music[len(music)*1/2:len(music)*2/2]
 
 print "len Wav:", len(music)
 saveSound(music, FLAME_RATE/TEST, "raw.wav")
@@ -98,13 +98,10 @@ N_OUTPUT = 100
 R = 64
 L = 2**10
 useGPU = True
-model = Wavenet.Wavenet(N_OUTPUT,R,1,15,30,30,useGPU)
-xp = numpy
+model = Wavenet.Wavenet(N_OUTPUT,R,1,10,30,30,useGPU)
 if useGPU:
-    xp = chainer.cuda.cupy
     model.to_gpu()
-else:
-    xp = np
+xp = np
 
 hoge = []
 data = []
@@ -112,18 +109,26 @@ answers = []
 
 pos = 0
 log = 0
+
+quantizedMusic = np.zeros((R, 1, len(music)), dtype = 'f')
+for i in range(len(music)):
+    v = (music[i] + 1.0) / 2.0
+    idx = int(v * (R-1))
+    quantizedMusic[idx][0][i] = 1.0
+
 while pos + L + N_OUTPUT < len(music):
     currentLoad =  int((pos + L + N_OUTPUT) / float(len(music)) * 100)
     if currentLoad -10 >= log:
         log = currentLoad
         print currentLoad, "%"
         break
-    x = xp.zeros((R, 1, L), dtype = 'f')
+    x = quantizedMusic[:, :, pos: pos+L]
+    """
     for i in range(L):
         v = (music[pos+i] + 1.0) / 2.0
         idx = int(v * (R-1))
         x[idx][0][i] = 1.0
-
+    """
     answer = xp.zeros((N_OUTPUT), dtype = 'i')
     for i in range(N_OUTPUT):
         v = (music[pos+L+i] + 1.0) / 2.0
@@ -133,17 +138,11 @@ while pos + L + N_OUTPUT < len(music):
     data.append(x)
     answers.append(answer)
     pos += N_OUTPUT
-    if len(data) >= 10:
-        print "ok"
-        break
 
 print "NUM DATA:", len(data)
 trainIter = iterator.Iterator(10, data, answers, True)
 optimizer = chainer.optimizers.Adam(alpha = 0.001)
 optimizer.setup(model)
-
-d = data[0]
-d = d.reshape(((1,) + d.shape))
 
 for i in range(10):
     print "EPOCH :", i
@@ -156,9 +155,14 @@ for i in range(10):
         if trainIter.newEpoch:
             break
 
+d = data[0]
+d = d.reshape(((1,) + d.shape))
+if useGPU:
+    d = chainer.cuda.to_gpu(d)
 res = []
-for i in range(1000):
+for i in range(2000):
     print i
+    
     y = model.forward(d)
     next = np.zeros((R, 1, N_OUTPUT), dtype = 'f')
     for i in range(N_OUTPUT):
