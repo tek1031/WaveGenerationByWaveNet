@@ -74,7 +74,8 @@ def saveSound(v, samplingRate, fileName):
     print "save :", fileName
 
 #file_name = "880Hz.WAV"
-file_name = "0321.wav"
+#file_name = "0321.wav"
+file_name = "testInput1.wav"
 wave_file = wave.open(file_name,"r") #open
 
 music = wave_file.readframes(wave_file.getnframes()) 
@@ -82,15 +83,14 @@ music = np.frombuffer(music, dtype= "int16")
 music = np.asarray(music, dtype = 'f')
 rawMusic = np.copy(music)
 
-TEST = 3
+TEST = 5
+FLAME_RATE = 44100*2
 music = music[::TEST]
-music = music[len(music)*1/4:len(music)*2/4]
+music = music[len(music)*1/20:len(music)*2/20]
 
 print "len Wav:", len(music)
-saveSound(music, 44100/TEST, "raw.wav")
+saveSound(music, FLAME_RATE/TEST, "raw.wav")
 music, max, min = normalize(music)
-print np.max(music)
-print np.min(music)
 for i in range(len(music)):
     music[i] = mu_law(music[i], MU)
 
@@ -98,7 +98,8 @@ N_OUTPUT = 100
 R = 64
 L = 2**10
 useGPU = True
-model = Wavenet.Wavenet(N_OUTPUT,R,1,10,50,50,useGPU)
+model = Wavenet.Wavenet(N_OUTPUT,R,1,15,30,30,useGPU)
+xp = numpy
 if useGPU:
     xp = chainer.cuda.cupy
     model.to_gpu()
@@ -108,16 +109,15 @@ else:
 hoge = []
 data = []
 answers = []
-pos = 0
-print "max :", np.max(music)
-print "min :", np.min(music)
 
+pos = 0
 log = 0
 while pos + L + N_OUTPUT < len(music):
     currentLoad =  int((pos + L + N_OUTPUT) / float(len(music)) * 100)
     if currentLoad -10 >= log:
         log = currentLoad
         print currentLoad, "%"
+        break
     x = xp.zeros((R, 1, L), dtype = 'f')
     for i in range(L):
         v = (music[pos+i] + 1.0) / 2.0
@@ -133,11 +133,17 @@ while pos + L + N_OUTPUT < len(music):
     data.append(x)
     answers.append(answer)
     pos += N_OUTPUT
+    if len(data) >= 10:
+        print "ok"
+        break
 
-print len(data)
+print "NUM DATA:", len(data)
 trainIter = iterator.Iterator(10, data, answers, True)
 optimizer = chainer.optimizers.Adam(alpha = 0.001)
 optimizer.setup(model)
+
+d = data[0]
+d = d.reshape(((1,) + d.shape))
 
 for i in range(10):
     print "EPOCH :", i
@@ -150,18 +156,18 @@ for i in range(10):
         if trainIter.newEpoch:
             break
 
-testIter = iterator.Iterator(1, data, answers, shuffle = False)
 res = []
-while True:
-    x, t =  testIter.Next()
-    y = model.forward(x)
-    B = len(y[0].data)
-    for b in range(B):
-        for i in range(N_OUTPUT):
-            p = softMax(y[i].data[b])
-            res.append(xp.argmax(p))
-    if testIter.newEpoch:
-        break
+for i in range(1000):
+    print i
+    y = model.forward(d)
+    next = np.zeros((R, 1, N_OUTPUT), dtype = 'f')
+    for i in range(N_OUTPUT):
+        idx = int(xp.argmax(y[i].data[0]))
+        res.append(idx)
+        next[idx][0][i] = 1.0
+    next = chainer.cuda.to_gpu(next)
+    d[:, :, :, :-N_OUTPUT] = d[:, :, :, N_OUTPUT:]
+    d[:, :, :, L-N_OUTPUT:] = next
 
 for i in range(len(res)):
     res[i] = res[i] / float(R-1)
@@ -177,4 +183,4 @@ for i in range(len(res)):
 
 print len(res)
 print res
-saveSound(res, 44100/TEST, "test.wav")
+saveSound(res, FLAME_RATE/TEST, "test0.wav")
